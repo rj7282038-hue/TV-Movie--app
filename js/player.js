@@ -726,7 +726,7 @@
             const item = document.createElement('div');
             item.className = 'cast-avatar-card';
             item.innerHTML = `
-                <img class="cast-avatar-img" src="${photo}" alt="${escapeHtml(actor.name)}" loading="lazy">
+                <img class="cast-avatar-img" src="${photo}" alt="${escapeHtml(actor.name)}" loading="lazy" decoding="async">
                 <div class="cast-actor-name">${escapeHtml(actor.name)}</div>
                 <div class="cast-char-name">${escapeHtml(actor.character || '')}</div>
             `;
@@ -753,7 +753,7 @@
             card.setAttribute('role', 'button');
             card.innerHTML = `
                 <div class="card-poster-wrapper">
-                    <img src="${poster}" alt="${escapeHtml(title)}" loading="lazy">
+                    <img src="${poster}" alt="${escapeHtml(title)}" loading="lazy" decoding="async">
                     <div class="card-badge-rating"><i class="fas fa-star"></i>${rating}</div>
                 </div>
                 <div class="card-info-peek">
@@ -1273,7 +1273,13 @@
             }
         });
 
-        localVideo.addEventListener('play', () => updatePlayPauseIcons(true));
+        localVideo.addEventListener('play', () => {
+            updatePlayPauseIcons(true);
+            if (document.activeElement && (document.activeElement.classList.contains('server-pill') || document.activeElement.tagName === 'BODY')) {
+                document.activeElement.blur();
+                if (localVideoSurface) localVideoSurface.focus();
+            }
+        });
         localVideo.addEventListener('pause', () => updatePlayPauseIcons(false));
         localVideo.addEventListener('ended', () => {
             updatePlayPauseIcons(false);
@@ -2066,28 +2072,51 @@
         }, 1500);
     }
 
+    function isLocalPlayerActive() {
+        return !!(localVideo && (localVideo.src || localVideo.currentSrc || (localPlayerContainer && localPlayerContainer.style.display !== 'none')));
+    }
+
+    function isVideoActivelyPlaying() {
+        return !!(localVideo && !localVideo.paused && !localVideo.ended && (localVideo.currentTime > 0 || localVideo.src));
+    }
+
     function handleRemotePlayPause() {
-        if (currentServer === 'local' && localVideo) {
+        if (isLocalPlayerActive()) {
             if (localVideo.paused) {
                 localVideo.play().then(() => {
+                    updatePlayPauseIcons(true);
                     showTvActionBadge('fas fa-play', 'Playing');
                 }).catch(() => {});
             } else {
                 localVideo.pause();
+                updatePlayPauseIcons(false);
                 showTvActionBadge('fas fa-pause', 'Paused');
             }
             pingLocalControls();
+        } else if (iframe && iframe.contentWindow) {
+            try {
+                iframe.contentWindow.postMessage({ event: 'command', func: 'togglePlay' }, '*');
+                iframe.contentWindow.postMessage({ type: 'player:togglePlay' }, '*');
+                iframe.contentWindow.postMessage({ type: 'playpause' }, '*');
+            } catch (e) {}
+            showTvActionBadge('fas fa-play', 'Play / Pause');
         } else {
             showTvActionBadge('fas fa-play', 'Play / Pause');
         }
     }
 
     function handleRemoteSeek(seconds) {
-        if (currentServer === 'local' && localVideo && !isNaN(localVideo.duration)) {
-            const newTime = Math.max(0, Math.min(localVideo.duration, localVideo.currentTime + seconds));
+        if (isLocalPlayerActive() && !isNaN(localVideo.duration) && localVideo.duration > 0) {
+            const newTime = Math.max(0, Math.min(localVideo.duration, (localVideo.currentTime || 0) + seconds));
             localVideo.currentTime = newTime;
             showTvActionBadge(seconds > 0 ? 'fas fa-forward' : 'fas fa-backward', `${seconds > 0 ? '+' : ''}${seconds}s`);
             pingLocalControls();
+        } else if (iframe && iframe.contentWindow) {
+            try {
+                iframe.contentWindow.postMessage({ type: 'player:seek', value: seconds }, '*');
+                iframe.contentWindow.postMessage({ event: 'command', func: 'seek', args: [seconds] }, '*');
+            } catch (e) {}
+            showTvActionBadge(seconds > 0 ? 'fas fa-forward' : 'fas fa-backward', `${seconds > 0 ? '+' : ''}${seconds}s Seek`);
         } else {
             showTvActionBadge(seconds > 0 ? 'fas fa-forward' : 'fas fa-backward', `${seconds > 0 ? '+' : ''}${seconds}s Seek`);
         }
@@ -2161,6 +2190,26 @@
         if (!navigables.length) return null;
         if (!currentEl || !navigables.includes(currentEl)) return navigables[0];
 
+        // ═════════ Fast Direct Sibling Navigation (< 0.001ms) ═════════
+        if (currentEl) {
+            if (direction === 'right') {
+                const next = currentEl.nextElementSibling;
+                if (next && (next.classList.contains('server-pill') || next.classList.contains('action-chip-btn') || next.classList.contains('ep-item-card') || next.classList.contains('movie-card'))) {
+                    return next;
+                }
+            }
+            if (direction === 'left') {
+                const prev = currentEl.previousElementSibling;
+                if (prev && (prev.classList.contains('server-pill') || prev.classList.contains('action-chip-btn') || prev.classList.contains('ep-item-card') || prev.classList.contains('movie-card'))) {
+                    return prev;
+                }
+            }
+            if ((direction === 'down' || direction === 'up') && currentEl.classList.contains('local-track-item')) {
+                const sibling = direction === 'down' ? currentEl.nextElementSibling : currentEl.previousElementSibling;
+                if (sibling && sibling.classList.contains('local-track-item')) return sibling;
+            }
+        }
+
         const curRect = currentEl.getBoundingClientRect();
         const curCenter = {
             x: curRect.left + curRect.width / 2,
@@ -2223,14 +2272,14 @@
     let tvNavThrottle = 0;
     function navigateTvPlayer(direction) {
         const now = Date.now();
-        if (now - tvNavThrottle < 65) return;
+        if (now - tvNavThrottle < 35) return;
         tvNavThrottle = now;
 
         const current = document.activeElement;
         const next = findNextPlayerTarget(current, direction);
         if (next) {
             next.focus();
-            next.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            next.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
         }
     }
 
@@ -2242,7 +2291,7 @@
             const target = (currentServer === 'local' && playPause) ? playPause : (activePill || backBtn);
             if (target) {
                 target.focus();
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.scrollIntoView({ behavior: 'auto', block: 'center' });
             }
         }, 550);
     }
@@ -2254,42 +2303,144 @@
         const targetTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
         const isInput = targetTag === 'input' || targetTag === 'textarea';
 
+        const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active');
+
         // DPAD Directional Keys
         if (key === 'ArrowRight' || code === 39 || code === 22) {
             if (!isInput) {
                 e.preventDefault();
-                navigateTvPlayer('right');
-            }
-            return;
-        }
-        if (key === 'ArrowLeft' || code === 37 || code === 21) {
-            if (!isInput) {
-                e.preventDefault();
-                navigateTvPlayer('left');
-            }
-            return;
-        }
-        if (key === 'ArrowDown' || code === 40 || code === 20) {
-            if (!isInput) {
-                e.preventDefault();
-                navigateTvPlayer('down');
-            }
-            return;
-        }
-        if (key === 'ArrowUp' || code === 38 || code === 19) {
-            if (!isInput) {
-                e.preventDefault();
-                navigateTvPlayer('up');
+                if (activeDrawer) {
+                    navigateTvPlayer('right');
+                    return;
+                }
+
+                // Automatic Seek Forward +10s when video is playing or player is active
+                const videoPlaying = isVideoActivelyPlaying();
+                const localActive = isLocalPlayerActive();
+                const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
+                const isFocusedOnCards = document.activeElement && (
+                    document.activeElement.classList.contains('ep-item-card') ||
+                    document.activeElement.classList.contains('server-pill') ||
+                    document.activeElement.classList.contains('movie-card')
+                );
+
+                if (videoPlaying || isFullscreen || (localActive && !isFocusedOnCards)) {
+                    handleRemoteSeek(10);
+                } else {
+                    navigateTvPlayer('right');
+                }
             }
             return;
         }
 
-        // DPAD Center / Enter / OK
+        if (key === 'ArrowLeft' || code === 37 || code === 21) {
+            if (!isInput) {
+                e.preventDefault();
+                if (activeDrawer) {
+                    navigateTvPlayer('left');
+                    return;
+                }
+
+                // Automatic Seek Backward -10s when video is playing or player is active
+                const videoPlaying = isVideoActivelyPlaying();
+                const localActive = isLocalPlayerActive();
+                const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
+                const isFocusedOnCards = document.activeElement && (
+                    document.activeElement.classList.contains('ep-item-card') ||
+                    document.activeElement.classList.contains('server-pill') ||
+                    document.activeElement.classList.contains('movie-card')
+                );
+
+                if (videoPlaying || isFullscreen || (localActive && !isFocusedOnCards)) {
+                    handleRemoteSeek(-10);
+                } else {
+                    navigateTvPlayer('left');
+                }
+            }
+            return;
+        }
+
+        if (key === 'ArrowDown' || code === 40 || code === 20) {
+            if (!isInput) {
+                e.preventDefault();
+                navigateTvPlayer('down');
+                pingLocalControls();
+            }
+            return;
+        }
+
+        if (key === 'ArrowUp' || code === 38 || code === 19) {
+            if (!isInput) {
+                e.preventDefault();
+                navigateTvPlayer('up');
+                pingLocalControls();
+            }
+            return;
+        }
+
+        // DPAD Center / Enter / OK (Automatic Play & Pause during playback)
         if (key === 'Enter' || code === 13 || code === 23 || code === 66) {
-            if (!isInput && document.activeElement && document.activeElement !== document.body) {
-                // If focused on an element, let click handler run
+            if (isInput) return; // Allow normal input enter
+
+            if (activeDrawer) {
+                if (document.activeElement && activeDrawer.contains(document.activeElement)) {
+                    document.activeElement.click();
+                    return;
+                }
+            }
+
+            // Explicit Back Button click
+            if (document.activeElement && document.activeElement.id === 'btnBackFromPlayer') {
+                document.activeElement.click();
+                return;
+            }
+
+            // Explicit special control buttons (Audio, Subtitles, Speed, Aspect, Fullscreen, etc.)
+            const isSpecificControlBtn = document.activeElement && (
+                document.activeElement.id === 'localBtnAudioTrack' ||
+                document.activeElement.id === 'localBtnSubtitles' ||
+                document.activeElement.id === 'localBtnSpeed' ||
+                document.activeElement.id === 'localBtnAspect' ||
+                document.activeElement.id === 'localBtnFullscreen' ||
+                document.activeElement.id === 'btnToggleZoom' ||
+                document.activeElement.id === 'btnChooseLocalFile' ||
+                document.activeElement.id === 'btnHubRescan' ||
+                document.activeElement.id === 'btnLocalShowStreams' ||
+                document.activeElement.id === 'btnLocalChangeFile' ||
+                document.activeElement.id === 'actionFavBtn'
+            );
+            if (isSpecificControlBtn) {
+                document.activeElement.click();
+                return;
+            }
+
+            // Automatic Play / Pause when video is playing or player is active
+            const videoPlaying = isVideoActivelyPlaying();
+            const localActive = isLocalPlayerActive();
+            const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
+
+            if (videoPlaying || isFullscreen || localActive) {
+                // If video is paused AND user has deliberately navigated down to an episode card or server pill, click it
+                if (!videoPlaying && document.activeElement && (
+                    document.activeElement.classList.contains('ep-item-card') ||
+                    document.activeElement.classList.contains('server-pill') ||
+                    document.activeElement.id === 'seasonSelect' ||
+                    document.activeElement.id === 'btnPrevEp' ||
+                    document.activeElement.id === 'btnNextEp'
+                )) {
+                    document.activeElement.click();
+                    return;
+                }
+
+                // Default playback action: Toggle Play & Pause
+                e.preventDefault();
+                handleRemotePlayPause();
+                return;
+            }
+
+            // Fallback for non-playback screens
+            if (document.activeElement && document.activeElement !== document.body) {
                 if (document.activeElement.getAttribute('role') === 'button' || document.activeElement.tabIndex >= 0) {
-                    // Trigger click
                     document.activeElement.click();
                 }
             }

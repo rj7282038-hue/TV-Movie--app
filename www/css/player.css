@@ -26,9 +26,7 @@ html, body.player-page {
     padding-top: var(--safe-top);
     padding-left: 14px;
     padding-right: 14px;
-    background: linear-gradient(180deg, rgba(8, 8, 12, 0.95) 0%, rgba(8, 8, 12, 0.6) 70%, transparent 100%);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(8, 8, 12, 0.98);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -69,12 +67,12 @@ html, body.player-page {
 .ambient-glow-diffuser {
     position: absolute;
     inset: -15px;
-    background: radial-gradient(circle at center, rgba(229, 9, 20, 0.28) 0%, transparent 70%);
-    filter: blur(28px);
+    background: radial-gradient(circle at center, rgba(229, 9, 20, 0.22) 0%, transparent 70%);
     opacity: 0.8;
     z-index: 1;
     pointer-events: none;
     transition: opacity 0.5s ease;
+    transform: translateZ(0);
 }
 
 .video-frame-box {
@@ -2480,19 +2478,24 @@ body.is-fullscreen .hub-glass-card {
 
 /* Widescreen & TV Optimization for Drawers and Performance */
 @media (min-width: 860px), (min-aspect-ratio: 4/3) {
+    *, *::before, *::after {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    html, body.player-page {
+        scroll-behavior: auto !important;
+    }
+
     .local-drawer {
         width: 480px !important;
         max-width: 90vw !important;
         background: rgba(14, 14, 20, 0.98) !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
         box-shadow: -15px 0 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 245, 255, 0.2) !important;
     }
     
     .landscape-floating-controls {
         background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, transparent 100%) !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
     }
 }
 

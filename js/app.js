@@ -174,7 +174,7 @@
 
         card.innerHTML = `
             <div class="card-poster-wrapper">
-                <img src="${posterUrl}" alt="${escapeHtml(title)}" loading="lazy" onerror="this.src='https://via.placeholder.com/342x513/14141c/ffffff?text=${encodeURIComponent(title)}';">
+                <img src="${posterUrl}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" onerror="this.src='https://via.placeholder.com/342x513/14141c/ffffff?text=${encodeURIComponent(title)}';">
                 <div class="card-badge-rating"><i class="fas fa-star"></i>${rating}</div>
                 ${isTop ? '<div class="card-badge-top">Top</div>' : ''}
             </div>
@@ -226,7 +226,7 @@
             const backdropUrl = `${TMDB_BACKDROP}${m.backdrop_path}`;
 
             slide.innerHTML = `
-                <img class="hero-backdrop" src="${backdropUrl}" alt="${escapeHtml(title)}">
+                <img class="hero-backdrop" src="${backdropUrl}" alt="${escapeHtml(title)}" decoding="async">
                 <div class="hero-overlay-gradient"></div>
                 <div class="hero-content">
                     <div class="hero-badge-tag"><i class="fas fa-bolt"></i> EPIC EXCLUSIVE</div>
@@ -913,11 +913,193 @@
         return { x: r.left + r.width / 2, y: r.top + r.height / 2, rect: r };
     }
 
+    // ═════════ Fast Hierarchical Spatial Navigation (Zero-Lag TV D-Pad) ═════════
+    function getFastSiblingOrRowTarget(currentActive, direction) {
+        if (!currentActive || currentActive === document.body) return null;
+
+        // 1. Trapped in Bottom Sheet Drawer
+        if (backdrop && backdrop.classList.contains('active')) {
+            const playBtn = document.getElementById('drawerPlayBtn');
+            const favBtn = document.getElementById('drawerFavBtn');
+            if (currentActive === playBtn && (direction === 'right' || direction === 'down')) return favBtn;
+            if (currentActive === favBtn && (direction === 'left' || direction === 'up')) return playBtn;
+            return playBtn;
+        }
+
+        // 2. Search Overlay
+        if (searchOverlay && searchOverlay.classList.contains('active')) {
+            const searchInput = document.getElementById('searchInputField');
+            const closeBtn = document.getElementById('btnCloseSearch');
+            if (currentActive === searchInput && direction === 'right') return closeBtn;
+            if (currentActive === closeBtn && direction === 'left') return searchInput;
+            if ((currentActive === searchInput || currentActive === closeBtn) && direction === 'down') {
+                const firstItem = document.querySelector('.search-item-row');
+                if (firstItem) { firstItem.tabIndex = 0; return firstItem; }
+            }
+            if (currentActive.classList.contains('search-item-row')) {
+                if (direction === 'down' && currentActive.nextElementSibling && currentActive.nextElementSibling.classList.contains('search-item-row')) {
+                    currentActive.nextElementSibling.tabIndex = 0;
+                    return currentActive.nextElementSibling;
+                }
+                if (direction === 'up') {
+                    if (currentActive.previousElementSibling && currentActive.previousElementSibling.classList.contains('search-item-row')) {
+                        currentActive.previousElementSibling.tabIndex = 0;
+                        return currentActive.previousElementSibling;
+                    }
+                    return searchInput;
+                }
+            }
+            return null;
+        }
+
+        // 3. Movie Card fast path (Direct Sibling < 0.001ms)
+        if (currentActive.classList.contains('movie-card')) {
+            if (direction === 'right') {
+                const next = currentActive.nextElementSibling;
+                if (next && next.classList.contains('movie-card')) return next;
+                return null;
+            }
+            if (direction === 'left') {
+                const prev = currentActive.previousElementSibling;
+                if (prev && prev.classList.contains('movie-card')) return prev;
+                return null;
+            }
+            if (direction === 'down') {
+                const curSec = currentActive.closest('.section-block');
+                if (curSec) {
+                    let nextSec = curSec.nextElementSibling;
+                    while (nextSec && !nextSec.querySelector('.movie-card')) {
+                        nextSec = nextSec.nextElementSibling;
+                    }
+                    if (nextSec) {
+                        const cards = Array.from(nextSec.querySelectorAll('.movie-card'));
+                        if (cards.length) {
+                            const curLeft = currentActive.offsetLeft;
+                            let closest = cards[0];
+                            let minDiff = Math.abs(cards[0].offsetLeft - curLeft);
+                            for (let i = 1; i < cards.length; i++) {
+                                const diff = Math.abs(cards[i].offsetLeft - curLeft);
+                                if (diff < minDiff) { minDiff = diff; closest = cards[i]; }
+                            }
+                            return closest;
+                        }
+                    }
+                }
+                const firstNav = document.querySelector('.bottom-nav .nav-item.active') || document.querySelector('.bottom-nav .nav-item');
+                if (firstNav) return firstNav;
+                return null;
+            }
+            if (direction === 'up') {
+                const curSec = currentActive.closest('.section-block');
+                if (curSec) {
+                    let prevSec = curSec.previousElementSibling;
+                    while (prevSec && !prevSec.querySelector('.movie-card')) {
+                        prevSec = prevSec.previousElementSibling;
+                    }
+                    if (prevSec) {
+                        const cards = Array.from(prevSec.querySelectorAll('.movie-card'));
+                        if (cards.length) {
+                            const curLeft = currentActive.offsetLeft;
+                            let closest = cards[0];
+                            let minDiff = Math.abs(cards[0].offsetLeft - curLeft);
+                            for (let i = 1; i < cards.length; i++) {
+                                const diff = Math.abs(cards[i].offsetLeft - curLeft);
+                                if (diff < minDiff) { minDiff = diff; closest = cards[i]; }
+                            }
+                            return closest;
+                        }
+                    }
+                }
+                const heroPlay = document.querySelector('.hero-slide.active .btn-play-primary');
+                if (heroPlay && heroPlay.offsetParent !== null) return heroPlay;
+                const activeChip = document.querySelector('.chip-btn.active') || document.querySelector('.chip-btn');
+                if (activeChip) return activeChip;
+                return null;
+            }
+        }
+
+        // 4. Category Chips fast path
+        if (currentActive.classList.contains('chip-btn')) {
+            if (direction === 'right') {
+                const next = currentActive.nextElementSibling;
+                if (next && next.classList.contains('chip-btn')) return next;
+            }
+            if (direction === 'left') {
+                const prev = currentActive.previousElementSibling;
+                if (prev && prev.classList.contains('chip-btn')) return prev;
+            }
+            if (direction === 'down') {
+                const heroPlay = document.querySelector('.hero-slide.active .btn-play-primary');
+                if (heroPlay && heroPlay.offsetParent !== null) return heroPlay;
+                const firstCard = document.querySelector('.movie-card');
+                if (firstCard) return firstCard;
+            }
+            if (direction === 'up') {
+                const searchBtn = document.getElementById('btnOpenSearch');
+                if (searchBtn) return searchBtn;
+            }
+        }
+
+        // 5. Hero Slide Buttons fast path
+        if (currentActive.classList.contains('btn-play-primary')) {
+            if (direction === 'right') {
+                const info = currentActive.closest('.hero-actions')?.querySelector('.btn-secondary-action');
+                if (info) return info;
+            }
+            if (direction === 'down') {
+                const firstCard = document.querySelector('.movie-card');
+                if (firstCard) return firstCard;
+            }
+            if (direction === 'up') {
+                const chip = document.querySelector('.chip-btn.active') || document.querySelector('.chip-btn');
+                if (chip) return chip;
+            }
+        }
+        if (currentActive.classList.contains('btn-secondary-action')) {
+            if (direction === 'left') {
+                const play = currentActive.closest('.hero-actions')?.querySelector('.btn-play-primary');
+                if (play) return play;
+            }
+            if (direction === 'down') {
+                const firstCard = document.querySelector('.movie-card');
+                if (firstCard) return firstCard;
+            }
+            if (direction === 'up') {
+                const chip = document.querySelector('.chip-btn.active') || document.querySelector('.chip-btn');
+                if (chip) return chip;
+            }
+        }
+
+        // 6. Bottom Navigation fast path
+        if (currentActive.classList.contains('nav-item')) {
+            if (direction === 'right') {
+                const next = currentActive.nextElementSibling;
+                if (next && next.classList.contains('nav-item')) return next;
+            }
+            if (direction === 'left') {
+                const prev = currentActive.previousElementSibling;
+                if (prev && prev.classList.contains('nav-item')) return prev;
+            }
+            if (direction === 'up') {
+                const allCards = document.querySelectorAll('.movie-card');
+                if (allCards.length) return allCards[allCards.length - 1];
+            }
+        }
+
+        return null;
+    }
+
     function findNextSpatialTarget(direction) {
+        const currentActive = document.activeElement;
+
+        // 1. Fast direct path first (< 0.001 ms, zero reflow)
+        const fastTarget = getFastSiblingOrRowTarget(currentActive, direction);
+        if (fastTarget) return fastTarget;
+
+        // 2. Fallback to broad spatial scan
         const items = getTvNavigables();
         if (!items.length) return null;
 
-        const currentActive = document.activeElement;
         if (!currentActive || !items.includes(currentActive)) {
             return items[0];
         }
@@ -955,7 +1137,6 @@
             }
 
             if (isValid) {
-                // Secondary distance penalty ensures natural row/column priority
                 const totalDist = primaryDist + (secondaryDist * 2.2);
                 if (totalDist < lowestDistance) {
                     lowestDistance = totalDist;
@@ -970,13 +1151,13 @@
     function navigateTvRemote(direction) {
         if (tvNavThrottle) return;
         tvNavThrottle = true;
-        setTimeout(() => { tvNavThrottle = false; }, 60);
+        setTimeout(() => { tvNavThrottle = false; }, 35);
 
         const target = findNextSpatialTarget(direction);
         if (target) {
             target.focus();
             lastFocusedElement = target;
-            target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            target.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
         }
     }
 

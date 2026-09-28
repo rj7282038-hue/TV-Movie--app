@@ -100,9 +100,7 @@ body {
     padding-top: var(--safe-top);
     padding-left: 16px;
     padding-right: 16px;
-    background: linear-gradient(180deg, rgba(10, 10, 14, 0.95) 0%, rgba(10, 10, 14, 0.75) 70%, transparent 100%);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(10, 10, 14, 0.98);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -111,7 +109,7 @@ body {
 }
 
 .app-header.scrolled {
-    background: rgba(10, 10, 14, 0.96);
+    background: rgba(10, 10, 14, 0.98);
     border-bottom: 1px solid var(--border-subtle);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
@@ -193,9 +191,7 @@ body {
     top: calc(var(--header-height) + var(--safe-top));
     z-index: 90;
     padding: 10px 16px;
-    background: linear-gradient(180deg, rgba(10, 10, 14, 0.92) 0%, rgba(10, 10, 14, 0.7) 80%, transparent 100%);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(10, 10, 14, 0.98);
     overflow-x: auto;
     white-space: nowrap;
     scrollbar-width: none;
@@ -398,8 +394,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.16);
     color: #ffffff;
     font-weight: 600;
     font-size: 0.9rem;
@@ -409,7 +404,7 @@ body {
     cursor: pointer;
     flex: 1;
     max-width: 150px;
-    transition: all var(--transition-fast);
+    transition: transform var(--transition-fast), background var(--transition-fast);
 }
 
 .btn-secondary-action:active {
@@ -501,10 +496,9 @@ body {
     padding: 4px 16px 10px;
     overflow-x: auto;
     overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    contain: layout paint;
 }
 .horizontal-track::-webkit-scrollbar { display: none; }
 
@@ -513,7 +507,6 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 .movie-card {
     flex: 0 0 var(--poster-w);
-    scroll-snap-align: start;
     position: relative;
     border-radius: var(--radius-sm);
     overflow: hidden;
@@ -521,8 +514,8 @@ body {
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    will-change: transform;
-    contain: content;
+    contain: layout paint;
+    transform: translateZ(0);
 }
 
 .movie-card:active {
@@ -542,15 +535,15 @@ body {
     height: 100%;
     object-fit: cover;
     display: block;
-    transition: opacity 0.3s;
+    transition: opacity 0.2s;
+    content-visibility: auto;
 }
 
 .card-badge-rating {
     position: absolute;
     top: 6px;
     left: 6px;
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.85);
     border-radius: 4px;
     padding: 2px 6px;
     font-size: 0.68rem;
@@ -631,8 +624,7 @@ body {
     bottom: 5px;
     left: 4px;
     right: 4px;
-    background: rgba(10, 10, 15, 0.88);
-    backdrop-filter: blur(4px);
+    background: rgba(10, 10, 15, 0.94);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 4px;
     padding: 2px 4px;
@@ -757,9 +749,7 @@ body {
     right: 0;
     height: calc(var(--bottom-nav-height) + var(--safe-bottom));
     padding-bottom: var(--safe-bottom);
-    background: rgba(12, 12, 16, 0.94);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(12, 12, 16, 0.98);
     border-top: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
@@ -923,13 +913,11 @@ body {
 .bottom-sheet-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: rgba(0, 0, 0, 0.82);
     z-index: 1050;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s;
+    transition: opacity 0.25s ease, visibility 0.25s;
 }
 
 .bottom-sheet-backdrop.active {
@@ -1163,18 +1151,29 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 /* 1. Android TV GPU Layer Promotion & Layout Containment (Zero Lag) */
+html, body {
+    scroll-behavior: auto;
+}
+
 .section-block {
-    contain: content;
+    contain: layout style;
+    content-visibility: auto;
+    contain-intrinsic-size: 800px 230px;
 }
 .horizontal-track {
     contain: layout paint;
-    scroll-behavior: smooth;
+    scroll-behavior: auto !important;
+    scroll-snap-type: none !important;
     -webkit-overflow-scrolling: touch;
 }
 .movie-card {
     contain: layout paint;
-    will-change: transform;
     transform: translateZ(0);
+}
+
+.movie-card:focus,
+.movie-card.tv-focused {
+    will-change: transform;
 }
 
 /* 2. Prominent Glowing TV Select Box / Focus Ring System ("har movie pe select box jaye") */
@@ -1192,36 +1191,44 @@ body {
 .drawer-actions-row button:focus,
 .section-more-link:focus,
 .search-item-row:focus {
-    outline: 3.5px solid #00f5ff !important;
+    outline: 3px solid #00f5ff !important;
     outline-offset: 3px !important;
-    transform: scale(1.08) translateZ(0) !important;
-    box-shadow: 0 0 25px rgba(0, 245, 255, 0.75), 0 10px 30px rgba(0, 0, 0, 0.85) !important;
+    transform: scale(1.06) translateZ(0) !important;
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.7), 0 8px 24px rgba(0, 0, 0, 0.85) !important;
     z-index: 100 !important;
     border-color: #00f5ff !important;
-    transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.15s ease !important;
+    transition: transform 0.12s ease !important;
 }
 
 /* Specific scaling for small chips & nav items on TV */
 .chip-btn:focus,
 .chip-btn.tv-focused {
-    transform: scale(1.12) translateZ(0) !important;
+    transform: scale(1.1) translateZ(0) !important;
     background: rgba(0, 245, 255, 0.22) !important;
     color: #ffffff !important;
 }
 
 .nav-item:focus,
 .nav-item.tv-focused {
-    transform: scale(1.15) translateZ(0) !important;
+    transform: scale(1.12) translateZ(0) !important;
     color: #00f5ff !important;
 }
 
 /* 3. Widescreen / Android TV 10-Foot Modal Experience (Centered Netflix-style Dialog) */
 @media (min-width: 860px), (min-aspect-ratio: 4/3) {
-    /* Optimize background blur for low-spec TV chipsets (eliminates GPU stall) */
-    .bottom-sheet-backdrop {
-        background: rgba(0, 0, 0, 0.85) !important;
+    /* Globally disable all backdrop blurs on TV to free up GPU fillrate completely */
+    *, *::before, *::after {
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
+    }
+
+    html, body, .horizontal-track, .search-results-area, .drawer-scroll-body {
+        scroll-behavior: auto !important;
+        scroll-snap-type: none !important;
+    }
+
+    .bottom-sheet-backdrop {
+        background: rgba(0, 0, 0, 0.85) !important;
     }
 
     .bottom-sheet-drawer {
@@ -1250,9 +1257,7 @@ body {
 
     /* TV navigation bar styling */
     .bottom-nav {
-        background: rgba(10, 10, 14, 0.96) !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
+        background: rgba(10, 10, 14, 0.98) !important;
         border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
 
