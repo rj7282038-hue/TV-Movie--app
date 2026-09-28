@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Red glowing letter G / Play Symbol -->
+    <group
+        android:scaleX="0.6"
+        android:scaleY="0.6"
+        android:translateX="21.6"
+        android:translateY="21.6">
+        <!-- Shield / Ring Shape -->
+        <path
+            android:fillColor="#E50914"
+            android:pathData="M54,10 C29.7,10 10,29.7 10,54 C10,78.3 29.7,98 54,98 C78.3,98 98,78.3 98,54 C98,29.7 78.3,10 54,10 Z M54,20 C72.8,20 88,35.2 88,54 C88,72.8 72.8,88 54,88 C35.2,88 20,72.8 20,54 C20,35.2 35.2,20 54,20 Z" />
+        <!-- Play Arrow inside -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M44,36 L72,54 L44,72 Z" />
+    </group>
+</vector>

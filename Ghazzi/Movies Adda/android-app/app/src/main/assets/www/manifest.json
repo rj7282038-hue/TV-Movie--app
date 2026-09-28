@@ -1,0 +1,24 @@
+{
+  "name": "Movies_Adda — Watch Movies & TV Shows",
+  "short_name": "Movies_Adda",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0b0f",
+  "theme_color": "#E50914",
+  "orientation": "any",
+  "description": "Stream thousands of movies, TV shows, and anime in HD with Movies_Adda.",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/netflix--v1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/netflix--v1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
