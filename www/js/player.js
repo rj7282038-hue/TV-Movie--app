@@ -353,6 +353,13 @@
     const btnPrevEp = document.getElementById('btnPrevEp');
     const btnNextEp = document.getElementById('btnNextEp');
     const seasonSelect = document.getElementById('seasonSelect');
+    const seasonsTrack = document.getElementById('seasonsTrack');
+    const tvDrawerSeasonsTrack = document.getElementById('tvDrawerSeasonsTrack');
+    const tvEpisodesDrawer = document.getElementById('tvEpisodesDrawer');
+    const btnTvEpDrawerClose = document.getElementById('btnTvEpDrawerClose');
+    const btnLandscapeEpisodes = document.getElementById('btnLandscapeEpisodes');
+    const btnOpenSeasons = document.getElementById('btnOpenSeasons');
+    const tvDrawerEpisodesList = document.getElementById('tvDrawerEpisodesList');
     const episodesSection = document.getElementById('episodesSection');
     const episodesList = document.getElementById('episodesList');
     const actionFavBtn = document.getElementById('actionFavBtn');
@@ -595,91 +602,211 @@
     }
 
     // ═════════ TV Series Season & Episode Handler ═════════
+    function openTvEpisodesDrawer() {
+        if (tvEpisodesDrawer) {
+            tvEpisodesDrawer.classList.add('active');
+            showTvActionBadge('fas fa-tv', 'Seasons & Episodes');
+            setTimeout(() => {
+                const activeChip = tvEpisodesDrawer.querySelector('.season-chip.active') || tvEpisodesDrawer.querySelector('.season-chip');
+                if (activeChip) activeChip.focus();
+            }, 60);
+        }
+    }
+
+    function closeTvEpisodesDrawer() {
+        if (tvEpisodesDrawer) {
+            tvEpisodesDrawer.classList.remove('active');
+        }
+    }
+
+    if (btnTvEpDrawerClose) {
+        btnTvEpDrawerClose.addEventListener('click', closeTvEpisodesDrawer);
+    }
+    if (btnLandscapeEpisodes) {
+        btnLandscapeEpisodes.addEventListener('click', () => {
+            if (tvEpisodesDrawer && tvEpisodesDrawer.classList.contains('active')) {
+                closeTvEpisodesDrawer();
+            } else {
+                openTvEpisodesDrawer();
+            }
+        });
+    }
+    if (btnOpenSeasons) {
+        btnOpenSeasons.addEventListener('click', () => {
+            const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
+            if (isFullscreen) {
+                openTvEpisodesDrawer();
+            } else {
+                if (episodesSection) {
+                    episodesSection.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    const activeChip = seasonsTrack ? seasonsTrack.querySelector('.season-chip.active') : null;
+                    if (activeChip) activeChip.focus();
+                }
+            }
+        });
+    }
+
+    async function selectSeason(seasonNum) {
+        currentSeason = parseInt(seasonNum, 10);
+        currentEpisode = 1;
+
+        // Sync active state on all season chips across page and drawer
+        document.querySelectorAll('.season-chip').forEach(c => {
+            const isSelected = parseInt(c.dataset.season, 10) === currentSeason;
+            c.classList.toggle('active', isSelected);
+            c.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        });
+
+        if (seasonSelect) seasonSelect.value = currentSeason;
+
+        showTvActionBadge('fas fa-layer-group', `Season ${currentSeason}`);
+        await loadSeasonEpisodes(currentSeason);
+        loadStream(currentServer);
+        updateQuickEpControls();
+    }
+
+    function renderSeasonChips(seasons) {
+        if (seasonsTrack) seasonsTrack.innerHTML = '';
+        if (tvDrawerSeasonsTrack) tvDrawerSeasonsTrack.innerHTML = '';
+
+        seasons.forEach(s => {
+            const sNum = s.season_number;
+            const sName = s.name || `Season ${sNum}`;
+            const epCount = s.episode_count ? `${s.episode_count} eps` : '';
+
+            // Main page track chip
+            if (seasonsTrack) {
+                const chip = document.createElement('button');
+                chip.className = `season-chip ${sNum === currentSeason ? 'active' : ''}`;
+                chip.dataset.season = sNum;
+                chip.tabIndex = 0;
+                chip.setAttribute('role', 'tab');
+                chip.setAttribute('aria-selected', sNum === currentSeason ? 'true' : 'false');
+                chip.innerHTML = `<i class="fas fa-layer-group"></i> ${escapeHtml(sName)}${epCount ? ` <small style="opacity:0.75;font-weight:500;">(${epCount})</small>` : ''}`;
+                
+                chip.addEventListener('click', () => {
+                    selectSeason(sNum);
+                });
+                seasonsTrack.appendChild(chip);
+            }
+
+            // TV In-Player Drawer chip
+            if (tvDrawerSeasonsTrack) {
+                const drawerChip = document.createElement('button');
+                drawerChip.className = `season-chip ${sNum === currentSeason ? 'active' : ''}`;
+                drawerChip.dataset.season = sNum;
+                drawerChip.tabIndex = 0;
+                drawerChip.innerHTML = `<i class="fas fa-layer-group"></i> ${escapeHtml(sName)}`;
+                drawerChip.addEventListener('click', () => {
+                    selectSeason(sNum);
+                });
+                tvDrawerSeasonsTrack.appendChild(drawerChip);
+            }
+        });
+    }
+
     async function setupTvSeries(tvData) {
         episodesSection.classList.add('show');
         epQuickControls.classList.add('show');
+        if (btnLandscapeEpisodes) {
+            btnLandscapeEpisodes.style.display = 'inline-flex';
+        }
 
         totalSeasons = tvData.number_of_seasons || (tvData.seasons ? tvData.seasons.length : 1);
-        seasonSelect.innerHTML = '';
+        if (seasonSelect) seasonSelect.innerHTML = '';
 
-        const seasons = (tvData.seasons || []).filter(s => s.season_number > 0);
+        let seasons = (tvData.seasons || []).filter(s => s.season_number > 0);
         if (!seasons.length) {
+            seasons = [];
             for (let i = 1; i <= totalSeasons; i++) {
-                const opt = document.createElement('option');
-                opt.value = i;
-                opt.textContent = `Season ${i}`;
-                if (i === currentSeason) opt.selected = true;
-                seasonSelect.appendChild(opt);
+                seasons.push({ season_number: i, name: `Season ${i}` });
             }
-        } else {
+        }
+
+        // Fallback options for legacy listeners
+        if (seasonSelect) {
             seasons.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.season_number;
-                opt.textContent = `${s.name || `Season ${s.season_number}`} (${s.episode_count} eps)`;
+                opt.textContent = `${s.name || `Season ${s.season_number}`} ${s.episode_count ? `(${s.episode_count} eps)` : ''}`;
                 if (s.season_number === currentSeason) opt.selected = true;
                 seasonSelect.appendChild(opt);
             });
+
+            seasonSelect.addEventListener('change', () => {
+                selectSeason(seasonSelect.value);
+            });
         }
 
-        seasonSelect.addEventListener('change', () => {
-            currentSeason = parseInt(seasonSelect.value, 10);
-            currentEpisode = 1;
-            loadSeasonEpisodes(currentSeason);
-            loadStream(currentServer);
-            updateQuickEpControls();
-        });
+        // Render interactive chips for remote D-Pad
+        renderSeasonChips(seasons);
 
         await loadSeasonEpisodes(currentSeason);
         updateQuickEpControls();
     }
 
     async function loadSeasonEpisodes(seasonNum) {
-        episodesList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);"><i class="fas fa-circle-notch fa-spin"></i> Loading episodes...</div>';
+        const loadingHtml = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);"><i class="fas fa-circle-notch fa-spin"></i> Loading episodes...</div>';
+        if (episodesList) episodesList.innerHTML = loadingHtml;
+        if (tvDrawerEpisodesList) tvDrawerEpisodesList.innerHTML = loadingHtml;
+
         try {
             const seasonData = await tmdbFetch(`/tv/${mediaId}/season/${seasonNum}`);
             seasonEpisodes = seasonData.episodes || [];
 
             if (!seasonEpisodes.length) {
-                episodesList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);">No episodes found.</div>';
+                const emptyHtml = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);">No episodes found for this season.</div>';
+                if (episodesList) episodesList.innerHTML = emptyHtml;
+                if (tvDrawerEpisodesList) tvDrawerEpisodesList.innerHTML = emptyHtml;
                 return;
             }
 
-            episodesList.innerHTML = '';
+            if (episodesList) episodesList.innerHTML = '';
+            if (tvDrawerEpisodesList) tvDrawerEpisodesList.innerHTML = '';
+
             seasonEpisodes.forEach(ep => {
                 const isPlaying = ep.episode_number === currentEpisode;
                 const still = ep.still_path ? `${TMDB_STILL}${ep.still_path}` : 'assets/no-still.png';
-                const epCard = document.createElement('div');
-                epCard.className = `ep-item-card ${isPlaying ? 'playing' : ''}`;
-                epCard.dataset.ep = ep.episode_number;
-                epCard.tabIndex = 0;
-                epCard.setAttribute('role', 'button');
 
-                epCard.innerHTML = `
-                    <img class="ep-item-thumb" src="${still}" alt="EP ${ep.episode_number}" onerror="this.src='https://via.placeholder.com/300x169/14141c/ffffff?text=Episode+${ep.episode_number}';">
-                    <div class="ep-item-info">
-                        <div class="ep-item-number">Episode ${ep.episode_number}</div>
-                        <div class="ep-item-title">${escapeHtml(ep.name || `Episode ${ep.episode_number}`)}</div>
-                        <div class="ep-item-time">${ep.runtime ? `${ep.runtime} min • ` : ''}${ep.air_date || ''}</div>
-                    </div>
-                    <div class="ep-item-icon-play">
-                        <i class="fas ${isPlaying ? 'fa-circle-play' : 'fa-play'}"></i>
-                    </div>
-                `;
+                function createEpCard() {
+                    const epCard = document.createElement('div');
+                    epCard.className = `ep-item-card ${isPlaying ? 'playing' : ''}`;
+                    epCard.tabIndex = 0;
+                    epCard.setAttribute('role', 'button');
+                    epCard.dataset.ep = ep.episode_number;
 
-                epCard.addEventListener('click', () => {
-                    currentEpisode = ep.episode_number;
-                    document.querySelectorAll('.ep-item-card').forEach(c => c.classList.remove('playing'));
-                    epCard.classList.add('playing');
-                    updateQuickEpControls();
-                    loadStream(currentServer);
-                    showToast(`Now Playing Episode ${currentEpisode}`);
-                });
+                    epCard.innerHTML = `
+                        <img class="ep-item-thumb" src="${still}" alt="EP ${ep.episode_number}" onerror="this.src='https://via.placeholder.com/300x169/14141c/ffffff?text=Episode+${ep.episode_number}';">
+                        <div class="ep-item-info">
+                            <div class="ep-item-number">Episode ${ep.episode_number}</div>
+                            <div class="ep-item-title">${escapeHtml(ep.name || `Episode ${ep.episode_number}`)}</div>
+                            <div class="ep-item-time">${ep.runtime ? `${ep.runtime} min • ` : ''}${ep.air_date || ''}</div>
+                        </div>
+                        <div class="ep-item-icon-play">
+                            <i class="fas ${isPlaying ? 'fa-circle-play' : 'fa-play'}"></i>
+                        </div>
+                    `;
 
-                episodesList.appendChild(epCard);
+                    epCard.addEventListener('click', () => {
+                        currentEpisode = ep.episode_number;
+                        updateActiveEpisodeUI();
+                        loadStream(currentServer);
+                        closeTvEpisodesDrawer();
+                        showToast(`Playing S${currentSeason} : E${currentEpisode}`);
+                        showTvActionBadge('fas fa-play', `S${currentSeason} : E${currentEpisode}`);
+                    });
+
+                    return epCard;
+                }
+
+                if (episodesList) episodesList.appendChild(createEpCard());
+                if (tvDrawerEpisodesList) tvDrawerEpisodesList.appendChild(createEpCard());
             });
 
         } catch (e) {
-            episodesList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);">Unable to load episodes.</div>';
+            const errHtml = '<div style="text-align:center;padding:20px;color:var(--text-tertiary);">Unable to load episodes.</div>';
+            if (episodesList) episodesList.innerHTML = errHtml;
+            if (tvDrawerEpisodesList) tvDrawerEpisodesList.innerHTML = errHtml;
         }
     }
 
@@ -695,6 +822,7 @@
             currentEpisode--;
             updateActiveEpisodeUI();
             loadStream(currentServer);
+            showTvActionBadge('fas fa-backward-step', `Episode ${currentEpisode}`);
         }
     });
 
@@ -702,6 +830,7 @@
         currentEpisode++;
         updateActiveEpisodeUI();
         loadStream(currentServer);
+        showTvActionBadge('fas fa-forward-step', `Episode ${currentEpisode}`);
     });
 
     function updateActiveEpisodeUI() {
@@ -1478,10 +1607,11 @@
         });
     }
 
-    // Drawers (Audio Tracks & Subtitles)
+    // Drawers (Audio Tracks & Subtitles & Episodes)
     function closeDrawers() {
         if (localAudioDrawer) localAudioDrawer.classList.remove('active');
         if (localSubtitlesDrawer) localSubtitlesDrawer.classList.remove('active');
+        if (tvEpisodesDrawer) tvEpisodesDrawer.classList.remove('active');
     }
 
     function updateAudioTracksList() {
@@ -2190,9 +2320,9 @@
     }
 
     function getPlayerTvNavigables() {
-        const activeDrawer = document.querySelector('.cinema-drawer.active');
+        const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active, .tv-episodes-drawer.active');
         if (activeDrawer) {
-            const drawerItems = Array.from(activeDrawer.querySelectorAll('.local-track-item, .cinema-drawer-close, button, [tabindex="0"]'));
+            const drawerItems = Array.from(activeDrawer.querySelectorAll('.season-chip, .ep-item-card, .local-track-item, .cinema-drawer-close, .local-drawer-close, button, [tabindex="0"]'));
             return drawerItems.filter(el => el.offsetParent !== null && !el.disabled);
         }
 
@@ -2200,9 +2330,10 @@
             '#btnBackFromPlayer',
             '.cinema-ctrl-btn',
             '.server-pill',
-            '#seasonSelect',
             '#btnPrevEp',
+            '#btnOpenSeasons',
             '#btnNextEp',
+            '.season-chip',
             '.ep-item-card',
             '.action-chip-btn',
             '.local-track-item',
@@ -2230,19 +2361,40 @@
         if (currentEl) {
             if (direction === 'right') {
                 const next = currentEl.nextElementSibling;
-                if (next && (next.classList.contains('server-pill') || next.classList.contains('action-chip-btn') || next.classList.contains('ep-item-card') || next.classList.contains('movie-card'))) {
+                if (next && (next.classList.contains('server-pill') || next.classList.contains('season-chip') || next.classList.contains('action-chip-btn') || next.classList.contains('ep-item-card') || next.classList.contains('movie-card'))) {
                     return next;
                 }
             }
             if (direction === 'left') {
                 const prev = currentEl.previousElementSibling;
-                if (prev && (prev.classList.contains('server-pill') || prev.classList.contains('action-chip-btn') || prev.classList.contains('ep-item-card') || prev.classList.contains('movie-card'))) {
+                if (prev && (prev.classList.contains('server-pill') || prev.classList.contains('season-chip') || prev.classList.contains('action-chip-btn') || prev.classList.contains('ep-item-card') || prev.classList.contains('movie-card'))) {
                     return prev;
                 }
             }
             if ((direction === 'down' || direction === 'up') && currentEl.classList.contains('local-track-item')) {
                 const sibling = direction === 'down' ? currentEl.nextElementSibling : currentEl.previousElementSibling;
                 if (sibling && sibling.classList.contains('local-track-item')) return sibling;
+            }
+
+            // Fast transition down from season chips into episode cards
+            if (direction === 'down' && currentEl.classList.contains('season-chip')) {
+                const isDrawerActive = tvEpisodesDrawer && tvEpisodesDrawer.classList.contains('active');
+                const targetEp = isDrawerActive
+                    ? (tvDrawerEpisodesList ? tvDrawerEpisodesList.querySelector('.ep-item-card') : null)
+                    : (episodesList ? episodesList.querySelector('.ep-item-card') : null);
+                if (targetEp) return targetEp;
+            }
+
+            // Fast transition up from first episode card into season chips
+            if (direction === 'up' && currentEl.classList.contains('ep-item-card')) {
+                const isFirstInList = !currentEl.previousElementSibling || !currentEl.previousElementSibling.classList.contains('ep-item-card');
+                if (isFirstInList) {
+                    const isDrawerActive = tvEpisodesDrawer && tvEpisodesDrawer.classList.contains('active');
+                    const targetChip = isDrawerActive
+                        ? (tvDrawerSeasonsTrack ? (tvDrawerSeasonsTrack.querySelector('.season-chip.active') || tvDrawerSeasonsTrack.querySelector('.season-chip')) : null)
+                        : (seasonsTrack ? (seasonsTrack.querySelector('.season-chip.active') || seasonsTrack.querySelector('.season-chip')) : null);
+                    if (targetChip) return targetChip;
+                }
             }
         }
 
@@ -2332,6 +2484,16 @@
         }, 550);
     }
 
+    // Double-Tap Remote State Trackers
+    let lastOkPressTime = 0;
+    let okTapTimeout = null;
+    let lastLeftPressTime = 0;
+    let lastRightPressTime = 0;
+    let lastSeekDirection = null;
+    let lastSeekActionTime = 0;
+    const DOUBLE_TAP_DELAY = 420; // 420ms window for double tap
+    const SEEK_CHAIN_DELAY = 650;  // chain seeking (+10s, +20s, +30s)
+
     // Google Android TV Remote Keydown Handler
     window.addEventListener('keydown', (e) => {
         const key = e.key;
@@ -2339,9 +2501,9 @@
         const targetTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
         const isInput = targetTag === 'input' || targetTag === 'textarea';
 
-        const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active');
+        const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active, .tv-episodes-drawer.active');
 
-        // DPAD Directional Keys
+        // DPAD Directional Right (Single tap moves UI focus; Double-tap during playback seeks +10s)
         if (key === 'ArrowRight' || code === 39 || code === 22) {
             if (!isInput) {
                 e.preventDefault();
@@ -2355,13 +2517,31 @@
                 const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
                 const isFocusedOnCards = document.activeElement && (
                     document.activeElement.classList.contains('ep-item-card') ||
+                    document.activeElement.classList.contains('season-chip') ||
                     document.activeElement.classList.contains('server-pill') ||
                     document.activeElement.classList.contains('movie-card') ||
                     document.activeElement.classList.contains('action-chip-btn')
                 );
 
-                if (isFullscreen || ((videoPlaying || localActive) && !isFocusedOnCards)) {
-                    handleRemoteSeek(10);
+                if (!isFullscreen && isFocusedOnCards) {
+                    navigateTvPlayer('right');
+                } else if (isFullscreen || videoPlaying || localActive) {
+                    // Double-tap Right for +10s Seek
+                    const now = Date.now();
+                    const timeSinceLastRight = now - lastRightPressTime;
+                    const timeSinceLastSeek = now - lastSeekActionTime;
+
+                    if (timeSinceLastRight < DOUBLE_TAP_DELAY || (lastSeekDirection === 'right' && timeSinceLastSeek < SEEK_CHAIN_DELAY)) {
+                        lastRightPressTime = 0;
+                        lastSeekDirection = 'right';
+                        lastSeekActionTime = now;
+                        handleRemoteSeek(10);
+                    } else {
+                        lastRightPressTime = now;
+                        lastLeftPressTime = 0;
+                        showTvActionBadge('fas fa-rotate-right', 'Press Right again to +10s');
+                        pingLocalControls();
+                    }
                 } else {
                     navigateTvPlayer('right');
                 }
@@ -2369,6 +2549,7 @@
             return;
         }
 
+        // DPAD Directional Left (Single tap moves UI focus; Double-tap during playback seeks -10s)
         if (key === 'ArrowLeft' || code === 37 || code === 21) {
             if (!isInput) {
                 e.preventDefault();
@@ -2382,13 +2563,31 @@
                 const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
                 const isFocusedOnCards = document.activeElement && (
                     document.activeElement.classList.contains('ep-item-card') ||
+                    document.activeElement.classList.contains('season-chip') ||
                     document.activeElement.classList.contains('server-pill') ||
                     document.activeElement.classList.contains('movie-card') ||
                     document.activeElement.classList.contains('action-chip-btn')
                 );
 
-                if (isFullscreen || ((videoPlaying || localActive) && !isFocusedOnCards)) {
-                    handleRemoteSeek(-10);
+                if (!isFullscreen && isFocusedOnCards) {
+                    navigateTvPlayer('left');
+                } else if (isFullscreen || videoPlaying || localActive) {
+                    // Double-tap Left for -10s Seek
+                    const now = Date.now();
+                    const timeSinceLastLeft = now - lastLeftPressTime;
+                    const timeSinceLastSeek = now - lastSeekActionTime;
+
+                    if (timeSinceLastLeft < DOUBLE_TAP_DELAY || (lastSeekDirection === 'left' && timeSinceLastSeek < SEEK_CHAIN_DELAY)) {
+                        lastLeftPressTime = 0;
+                        lastSeekDirection = 'left';
+                        lastSeekActionTime = now;
+                        handleRemoteSeek(-10);
+                    } else {
+                        lastLeftPressTime = now;
+                        lastRightPressTime = 0;
+                        showTvActionBadge('fas fa-rotate-left', 'Press Left again to -10s');
+                        pingLocalControls();
+                    }
                 } else {
                     navigateTvPlayer('left');
                 }
@@ -2414,7 +2613,7 @@
             return;
         }
 
-        // DPAD Center / Enter / OK (Automatic Play & Pause during playback)
+        // DPAD Center / Enter / OK (Double-Tap to Play/Pause; Single tap on menus selects item)
         if (key === 'Enter' || code === 13 || code === 23 || code === 66) {
             if (isInput) return; // Allow normal input enter
 
@@ -2431,7 +2630,7 @@
                 return;
             }
 
-            // Explicit special control buttons (Audio, Subtitles, Speed, Aspect, Fullscreen, etc.)
+            // Explicit control buttons (Audio, Subtitles, Episodes, Zoom, Fullscreen, etc.)
             const isSpecificControlBtn = document.activeElement && (
                 document.activeElement.id === 'localBtnAudioTrack' ||
                 document.activeElement.id === 'localBtnSubtitles' ||
@@ -2439,39 +2638,66 @@
                 document.activeElement.id === 'localBtnAspect' ||
                 document.activeElement.id === 'localBtnFullscreen' ||
                 document.activeElement.id === 'btnToggleZoom' ||
+                document.activeElement.id === 'btnLandscapeEpisodes' ||
+                document.activeElement.id === 'btnTvEpDrawerClose' ||
                 document.activeElement.id === 'btnChooseLocalFile' ||
                 document.activeElement.id === 'btnHubRescan' ||
                 document.activeElement.id === 'btnLocalShowStreams' ||
                 document.activeElement.id === 'btnLocalChangeFile' ||
-                document.activeElement.id === 'actionFavBtn'
+                document.activeElement.id === 'actionFavBtn' ||
+                document.activeElement.id === 'actionShareBtn' ||
+                document.activeElement.id === 'actionReloadBtn' ||
+                document.activeElement.id === 'actionFullscreenBtn'
             );
             if (isSpecificControlBtn) {
                 document.activeElement.click();
                 return;
             }
 
-            // Deliberate user selection on interactive menus (inactive server or episode card)
+            // Deliberate user selection on interactive items (Season Chip, Episode Card, server pill, etc.)
             const isIntentionalMenuClick = document.activeElement && (
+                document.activeElement.classList.contains('season-chip') ||
                 document.activeElement.classList.contains('ep-item-card') ||
                 (document.activeElement.classList.contains('server-pill') && !document.activeElement.classList.contains('active')) ||
                 document.activeElement.classList.contains('movie-card') ||
                 document.activeElement.id === 'seasonSelect' ||
                 document.activeElement.id === 'btnPrevEp' ||
-                document.activeElement.id === 'btnNextEp'
+                document.activeElement.id === 'btnNextEp' ||
+                document.activeElement.id === 'btnOpenSeasons'
             );
             if (isIntentionalMenuClick) {
                 document.activeElement.click();
                 return;
             }
 
-            // Automatic Play / Pause when video is playing or player is active
+            // Double-Tap to Play / Pause during playback ("ok 2 bar press krne pe play and pause ho ek bar me ni")
             const videoPlaying = isVideoActivelyPlaying();
             const localActive = isLocalPlayerActive();
             const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
 
             if (videoPlaying || isFullscreen || localActive) {
                 e.preventDefault();
-                handleRemotePlayPause();
+                const now = Date.now();
+                const timeSinceLastOk = now - lastOkPressTime;
+
+                if (timeSinceLastOk < DOUBLE_TAP_DELAY) {
+                    // Second press within window: execute Play/Pause!
+                    lastOkPressTime = 0;
+                    if (okTapTimeout) {
+                        clearTimeout(okTapTimeout);
+                        okTapTimeout = null;
+                    }
+                    handleRemotePlayPause();
+                } else {
+                    // First press: arm double-tap without pausing yet
+                    lastOkPressTime = now;
+                    showTvActionBadge('fas fa-hand-pointer', 'Press OK again to Play/Pause');
+                    pingLocalControls();
+                    if (okTapTimeout) clearTimeout(okTapTimeout);
+                    okTapTimeout = setTimeout(() => {
+                        lastOkPressTime = 0;
+                    }, DOUBLE_TAP_DELAY);
+                }
                 return;
             }
 
@@ -2484,7 +2710,7 @@
             return;
         }
 
-        // Media Play / Pause (Remote button or Spacebar)
+        // Dedicated Media Play / Pause (Physical Remote Play/Pause button or Spacebar)
         if (key === 'MediaPlayPause' || code === 179 || code === 85 || (key === ' ' && !isInput)) {
             e.preventDefault();
             handleRemotePlayPause();
@@ -2500,6 +2726,17 @@
         if (key === 'MediaFastForward' || code === 228 || (key === 'l' && !isInput)) {
             e.preventDefault();
             handleRemoteSeek(10);
+            return;
+        }
+
+        // Episodes Drawer Shortcut ('E' key on remote/keyboard for TV Shows)
+        if ((key === 'e' || key === 'E') && !isInput && mediaType === 'tv') {
+            e.preventDefault();
+            if (tvEpisodesDrawer && tvEpisodesDrawer.classList.contains('active')) {
+                closeTvEpisodesDrawer();
+            } else {
+                openTvEpisodesDrawer();
+            }
             return;
         }
 
@@ -2533,7 +2770,7 @@
         // Android TV Back Button
         if (key === 'Escape' || (key === 'Backspace' && !isInput) || code === 27 || (code === 8 && !isInput) || code === 4 || code === 10009 || code === 461) {
             e.preventDefault();
-            const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active');
+            const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active, .tv-episodes-drawer.active');
             if (activeDrawer) {
                 closeDrawers();
                 return;

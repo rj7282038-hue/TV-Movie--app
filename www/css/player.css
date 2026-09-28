@@ -235,9 +235,29 @@ html, body.player-page {
 }
 
 .current-ep-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.8rem;
     font-weight: 700;
-    color: var(--primary);
+    color: #00e5ff;
+    background: rgba(0, 229, 255, 0.1);
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+}
+
+.current-ep-badge:hover,
+.current-ep-badge:focus,
+.current-ep-badge:focus-visible {
+    background: rgba(0, 229, 255, 0.25);
+    border-color: #00e5ff;
+    outline: 3px solid #00f5ff !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -340,8 +360,9 @@ html, body.player-page {
 .episodes-section {
     display: none;
     flex-direction: column;
-    gap: 12px;
-    margin-top: 8px;
+    gap: 14px;
+    margin-top: 6px;
+    margin-bottom: 8px;
     border-top: 1px solid var(--border-subtle);
     padding-top: 16px;
 }
@@ -354,6 +375,90 @@ html, body.player-page {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+}
+
+.episodes-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.episodes-heading {
+    font-size: 1.15rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    margin: 0;
+}
+
+.episodes-subheading {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+/* ──── Horizontal Scrollable Season Chips Track ──── */
+.seasons-track-wrapper {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    padding: 4px 0 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+.seasons-track-wrapper::-webkit-scrollbar { display: none; }
+
+.seasons-track {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.season-chip {
+    padding: 8px 16px;
+    background: #181824;
+    border: 1.5px solid rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
+    color: #e0e0e0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    user-select: none;
+    outline: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.season-chip:hover {
+    background: #252538;
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+
+.season-chip.active {
+    background: linear-gradient(135deg, #e50914, #ff334b);
+    border-color: #ff4d60;
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(229, 9, 20, 0.4);
+}
+
+/* TV Remote Focus Ring */
+.season-chip:focus,
+.season-chip:focus-visible {
+    outline: 3px solid #00f5ff !important;
+    outline-offset: 2px;
+    border-color: #00f5ff !important;
+    background: #232338;
+    color: #fff;
+    transform: scale(1.06);
+    box-shadow: 0 0 16px rgba(0, 245, 255, 0.5) !important;
+    z-index: 10;
 }
 
 .season-select-box {
@@ -389,6 +494,12 @@ html, body.player-page {
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-fast);
+    outline: none;
+}
+
+.ep-item-card:hover {
+    background: #1c1c2a;
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .ep-item-card:active {
@@ -398,6 +509,67 @@ html, body.player-page {
 .ep-item-card.playing {
     border-color: var(--primary);
     background: rgba(229, 9, 20, 0.12);
+}
+
+.ep-item-card:focus,
+.ep-item-card:focus-visible {
+    outline: 3px solid #00f5ff !important;
+    outline-offset: 2px;
+    border-color: #00f5ff !important;
+    background: #222234 !important;
+    transform: scale(1.02);
+    box-shadow: 0 0 16px rgba(0, 245, 255, 0.4) !important;
+    z-index: 10;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TV In-Player Episodes & Seasons Drawer Overlay
+   ═══════════════════════════════════════════════════════════════ */
+.tv-episodes-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 85%;
+    background: rgba(14, 16, 26, 0.98);
+    border-top: 2px solid #00e5ff;
+    border-radius: 16px 16px 0 0;
+    padding: 14px 16px 18px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.9);
+    transform: translateY(105%);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tv-episodes-drawer.active {
+    transform: translateY(0);
+}
+
+.tv-drawer-seasons-wrap {
+    overflow-x: auto;
+    padding: 4px 0 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tv-drawer-seasons-wrap::-webkit-scrollbar { display: none; }
+
+.tv-drawer-seasons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tv-drawer-episodes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .ep-item-thumb {
