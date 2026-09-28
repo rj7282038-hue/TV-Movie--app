@@ -2094,8 +2094,18 @@
         return !!(localVideo && (localVideo.src || localVideo.currentSrc || (localPlayerContainer && localPlayerContainer.style.display !== 'none')));
     }
 
+    function isIframeStreamActive() {
+        return !!(iframe && iframe.src && iframe.src !== 'about:blank' && (!localPlayerContainer || localPlayerContainer.style.display === 'none'));
+    }
+
     function isVideoActivelyPlaying() {
-        return !!(localVideo && !localVideo.paused && !localVideo.ended && (localVideo.currentTime > 0 || localVideo.src));
+        if (localVideo && !localVideo.paused && !localVideo.ended && (localVideo.currentTime > 0 || localVideo.src)) {
+            return true;
+        }
+        if (isIframeStreamActive()) {
+            return true;
+        }
+        return false;
     }
 
     function handleRemotePlayPause() {
@@ -2116,6 +2126,11 @@
                 iframe.contentWindow.postMessage({ event: 'command', func: 'togglePlay' }, '*');
                 iframe.contentWindow.postMessage({ type: 'player:togglePlay' }, '*');
                 iframe.contentWindow.postMessage({ type: 'playpause' }, '*');
+                iframe.contentWindow.postMessage({ action: 'togglePlay' }, '*');
+                iframe.contentWindow.postMessage({ method: 'togglePlay' }, '*');
+                iframe.contentWindow.postMessage('togglePlay', '*');
+                iframe.contentWindow.postMessage('playpause', '*');
+                iframe.focus();
             } catch (e) {}
             showTvActionBadge('fas fa-play', 'Play / Pause');
         } else {
@@ -2133,6 +2148,9 @@
             try {
                 iframe.contentWindow.postMessage({ type: 'player:seek', value: seconds }, '*');
                 iframe.contentWindow.postMessage({ event: 'command', func: 'seek', args: [seconds] }, '*');
+                iframe.contentWindow.postMessage({ action: 'seek', offset: seconds }, '*');
+                iframe.contentWindow.postMessage({ type: 'seek', value: seconds }, '*');
+                iframe.focus();
             } catch (e) {}
             showTvActionBadge(seconds > 0 ? 'fas fa-forward' : 'fas fa-backward', `${seconds > 0 ? '+' : ''}${seconds}s Seek`);
         } else {
@@ -2332,17 +2350,17 @@
                     return;
                 }
 
-                // Automatic Seek Forward +10s when video is playing or player is active
                 const videoPlaying = isVideoActivelyPlaying();
                 const localActive = isLocalPlayerActive();
                 const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
                 const isFocusedOnCards = document.activeElement && (
                     document.activeElement.classList.contains('ep-item-card') ||
                     document.activeElement.classList.contains('server-pill') ||
-                    document.activeElement.classList.contains('movie-card')
+                    document.activeElement.classList.contains('movie-card') ||
+                    document.activeElement.classList.contains('action-chip-btn')
                 );
 
-                if (videoPlaying || isFullscreen || (localActive && !isFocusedOnCards)) {
+                if (isFullscreen || ((videoPlaying || localActive) && !isFocusedOnCards)) {
                     handleRemoteSeek(10);
                 } else {
                     navigateTvPlayer('right');
@@ -2359,17 +2377,17 @@
                     return;
                 }
 
-                // Automatic Seek Backward -10s when video is playing or player is active
                 const videoPlaying = isVideoActivelyPlaying();
                 const localActive = isLocalPlayerActive();
                 const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
                 const isFocusedOnCards = document.activeElement && (
                     document.activeElement.classList.contains('ep-item-card') ||
                     document.activeElement.classList.contains('server-pill') ||
-                    document.activeElement.classList.contains('movie-card')
+                    document.activeElement.classList.contains('movie-card') ||
+                    document.activeElement.classList.contains('action-chip-btn')
                 );
 
-                if (videoPlaying || isFullscreen || (localActive && !isFocusedOnCards)) {
+                if (isFullscreen || ((videoPlaying || localActive) && !isFocusedOnCards)) {
                     handleRemoteSeek(-10);
                 } else {
                     navigateTvPlayer('left');
@@ -2432,31 +2450,32 @@
                 return;
             }
 
+            // Deliberate user selection on interactive menus (inactive server or episode card)
+            const isIntentionalMenuClick = document.activeElement && (
+                document.activeElement.classList.contains('ep-item-card') ||
+                (document.activeElement.classList.contains('server-pill') && !document.activeElement.classList.contains('active')) ||
+                document.activeElement.classList.contains('movie-card') ||
+                document.activeElement.id === 'seasonSelect' ||
+                document.activeElement.id === 'btnPrevEp' ||
+                document.activeElement.id === 'btnNextEp'
+            );
+            if (isIntentionalMenuClick) {
+                document.activeElement.click();
+                return;
+            }
+
             // Automatic Play / Pause when video is playing or player is active
             const videoPlaying = isVideoActivelyPlaying();
             const localActive = isLocalPlayerActive();
             const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
 
             if (videoPlaying || isFullscreen || localActive) {
-                // If video is paused AND user has deliberately navigated down to an episode card or server pill, click it
-                if (!videoPlaying && document.activeElement && (
-                    document.activeElement.classList.contains('ep-item-card') ||
-                    document.activeElement.classList.contains('server-pill') ||
-                    document.activeElement.id === 'seasonSelect' ||
-                    document.activeElement.id === 'btnPrevEp' ||
-                    document.activeElement.id === 'btnNextEp'
-                )) {
-                    document.activeElement.click();
-                    return;
-                }
-
-                // Default playback action: Toggle Play & Pause
                 e.preventDefault();
                 handleRemotePlayPause();
                 return;
             }
 
-            // Fallback for non-playback screens
+            // Fallback for other buttons
             if (document.activeElement && document.activeElement !== document.body) {
                 if (document.activeElement.getAttribute('role') === 'button' || document.activeElement.tabIndex >= 0) {
                     document.activeElement.click();
