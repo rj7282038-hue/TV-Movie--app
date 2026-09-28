@@ -556,8 +556,8 @@ html, body.player-page {
     box-shadow: 0 2px 14px var(--primary-glow);
 }
 
-/* When in Landscape OR when .is-fullscreen class is active */
-@media (orientation: landscape), (max-height: 540px) {
+/* When on Phone in Landscape (height < 560px) OR when .is-fullscreen class is active */
+@media (orientation: landscape) and (max-height: 560px), body.player-page.is-fullscreen {
     html, body.player-page {
         overflow: hidden !important;
         background: #000000 !important;

@@ -2347,12 +2347,29 @@
             return;
         }
 
-        // Android TV Back Button
-        if (key === 'Escape' || (key === 'Backspace' && !isInput) || code === 27 || code === 8 || code === 4 || code === 10009 || code === 461) {
+        // Fullscreen / Zoom Toggle Shortcut ('F' key on remote/keyboard)
+        if ((key === 'f' || key === 'F') && !isInput) {
             e.preventDefault();
-            const activeDrawer = document.querySelector('.cinema-drawer.active');
+            const zoomBtn = document.getElementById('btnToggleZoom');
+            const fsBtn = document.getElementById('localBtnFullscreen');
+            if (zoomBtn) {
+                zoomBtn.click();
+            } else if (fsBtn) {
+                fsBtn.click();
+            }
+            return;
+        }
+
+        // Android TV Back Button
+        if (key === 'Escape' || (key === 'Backspace' && !isInput) || code === 27 || (code === 8 && !isInput) || code === 4 || code === 10009 || code === 461) {
+            e.preventDefault();
+            const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active');
             if (activeDrawer) {
                 closeDrawers();
+                return;
+            }
+            if (document.body.classList.contains('is-fullscreen')) {
+                document.body.classList.remove('is-fullscreen');
                 return;
             }
             if (btnBackFromPlayer) {

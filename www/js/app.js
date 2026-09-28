@@ -14,16 +14,20 @@
 
     const HOME_SECTIONS = [
         { key: 'trending', title: 'Trending Now', ep: '/trending/movie/day?page=', type: 'movie', hero: true },
+        { key: 'anime', title: '🎌 Anime Universe (Trending Series & Dubs)', ep: '/discover/tv?with_genres=16&with_original_language=ja&sort_by=popularity.desc&page=', type: 'tv' },
         { key: 'toprated', title: 'Top Rated Movies', ep: '/movie/top_rated?page=', type: 'movie' },
         { key: 'action', title: 'Action & Adventure', ep: '/discover/movie?with_genres=28&sort_by=popularity.desc&page=', type: 'movie' },
+        { key: 'animemovies', title: '🍿 Anime Blockbuster Movies', ep: '/discover/movie?with_genres=16&with_original_language=ja&sort_by=popularity.desc&page=', type: 'movie' },
         { key: 'scifi', title: 'Sci-Fi & Fantasy', ep: '/discover/movie?with_genres=878&sort_by=popularity.desc&page=', type: 'movie' },
         { key: 'bollywood', title: 'Bollywood Hits', ep: '/discover/movie?with_original_language=hi&sort_by=popularity.desc&page=', type: 'movie' },
         { key: 'comedy', title: 'Blockbuster Comedies', ep: '/discover/movie?with_genres=35&sort_by=popularity.desc&page=', type: 'movie' },
-        { key: 'animation', title: 'Animation & Anime', ep: '/discover/movie?with_genres=16&sort_by=popularity.desc&page=', type: 'movie' },
+        { key: 'animation', title: 'Animation All Stars', ep: '/discover/movie?with_genres=16&sort_by=popularity.desc&page=', type: 'movie' },
         { key: 'tvshows', title: 'Popular TV Series', ep: '/trending/tv/week?page=', type: 'tv' }
     ];
 
     const WALL_ENDPOINTS = {
+        anime: { title: '🎌 Anime Universe (All Anime Series & Dubs)', ep: '/discover/tv?with_genres=16&with_original_language=ja&sort_by=popularity.desc&page=', type: 'tv' },
+        animemovies: { title: '🍿 Anime Movies', ep: '/discover/movie?with_genres=16&with_original_language=ja&sort_by=popularity.desc&page=', type: 'movie' },
         movies: { title: 'Explore Movies', ep: '/discover/movie?sort_by=popularity.desc&vote_count.gte=30&page=', type: 'movie' },
         tv: { title: 'Explore TV Series', ep: '/discover/tv?sort_by=popularity.desc&vote_count.gte=30&page=', type: 'tv' },
         trending: { title: 'Trending This Week', ep: '/trending/all/week?page=', type: 'mixed' },
@@ -736,7 +740,7 @@
                         const type = item.media_type;
 
                         return `
-                            <div class="search-item-row" data-id="${item.id}" data-type="${type}">
+                            <div class="search-item-row" data-id="${item.id}" data-type="${type}" tabindex="0" role="button">
                                 ${poster ? `<img src="${poster}" alt="${escapeHtml(title)}">` : '<div style="width:52px;height:74px;background:#181822;border-radius:6px;"></div>'}
                                 <div class="search-item-details">
                                     <div class="search-item-title">${escapeHtml(title)}</div>
@@ -746,7 +750,7 @@
                                         <span style="text-transform:uppercase;">${type === 'tv' ? 'Series' : 'Movie'}</span>
                                     </div>
                                 </div>
-                                <button class="icon-btn" style="border:none;background:rgba(255,255,255,0.08);"><i class="fas fa-play" style="font-size:0.8rem;"></i></button>
+                                <button class="icon-btn" style="border:none;background:rgba(255,255,255,0.08);" tabindex="-1"><i class="fas fa-play" style="font-size:0.8rem;"></i></button>
                             </div>
                         `;
                     }).join('');
@@ -757,6 +761,12 @@
                             const type = row.dataset.type;
                             closeSearchView();
                             openBottomSheet(id, type);
+                        });
+                        row.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter' || e.keyCode === 13) {
+                                e.preventDefault();
+                                row.click();
+                            }
                         });
                     });
                 } else {
@@ -974,18 +984,24 @@
     document.addEventListener('keydown', (e) => {
         const key = e.key;
         const code = e.keyCode || e.which;
+        const targetTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        const isInput = targetTag === 'input' || targetTag === 'textarea';
 
         // DPAD RIGHT
         if (key === 'ArrowRight' || code === 39 || code === 22) {
-            e.preventDefault();
-            navigateTvRemote('right');
+            if (!isInput) {
+                e.preventDefault();
+                navigateTvRemote('right');
+            }
             return;
         }
 
         // DPAD LEFT
         if (key === 'ArrowLeft' || code === 37 || code === 21) {
-            e.preventDefault();
-            navigateTvRemote('left');
+            if (!isInput) {
+                e.preventDefault();
+                navigateTvRemote('left');
+            }
             return;
         }
 
@@ -998,13 +1014,16 @@
 
         // DPAD UP
         if (key === 'ArrowUp' || code === 38 || code === 19) {
-            e.preventDefault();
-            navigateTvRemote('up');
+            if (!isInput) {
+                e.preventDefault();
+                navigateTvRemote('up');
+            }
             return;
         }
 
         // OK / ENTER / DPAD_CENTER
         if (key === 'Enter' || code === 13 || code === 23 || code === 66) {
+            if (isInput) return;
             const active = document.activeElement;
             if (active && active !== document.body) {
                 active.click();
@@ -1014,6 +1033,7 @@
 
         // REMOTE MEDIA PLAY/PAUSE or 'P' key (Instant Play focused movie)
         if (key === 'p' || key === 'P' || code === 179 || code === 85) {
+            if (isInput) return;
             const active = document.activeElement;
             if (active && active.classList.contains('movie-card')) {
                 e.preventDefault();
@@ -1028,7 +1048,7 @@
         }
 
         // REMOTE BACK / ESCAPE / BACKSPACE
-        if (key === 'Escape' || key === 'Backspace' || code === 27 || code === 8 || code === 10009 || code === 461 || code === 4) {
+        if (key === 'Escape' || (!isInput && key === 'Backspace') || code === 27 || (!isInput && code === 8) || code === 10009 || code === 461 || code === 4) {
             if (searchOverlay && searchOverlay.classList.contains('active')) {
                 e.preventDefault();
                 closeSearchView();
