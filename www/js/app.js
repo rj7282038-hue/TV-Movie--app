@@ -1101,7 +1101,11 @@
         if (!items.length) return null;
 
         if (!currentActive || !items.includes(currentActive)) {
-            return items[0];
+            const preferred = document.querySelector('.chip-btn.active') ||
+                              document.querySelector('.hero-slide.active .btn-play-primary') ||
+                              document.querySelector('.movie-card') ||
+                              items[0];
+            return preferred || items[0];
         }
 
         const currentCenter = getElementCenter(currentActive);

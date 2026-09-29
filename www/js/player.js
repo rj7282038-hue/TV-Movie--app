@@ -2327,7 +2327,8 @@
         }
 
         const selector = [
-            '#btnBackFromPlayer',
+            '#btnBackToHome',
+            '#btnExitFullscreen',
             '.cinema-ctrl-btn',
             '.server-pill',
             '#btnPrevEp',
@@ -2355,37 +2356,63 @@
     function findNextPlayerTarget(currentEl, direction) {
         const navigables = getPlayerTvNavigables();
         if (!navigables.length) return null;
-        if (!currentEl || !navigables.includes(currentEl)) return navigables[0];
+        if (!currentEl || !navigables.includes(currentEl)) {
+            const preferred = document.querySelector('.server-pill.active') ||
+                              document.querySelector('.season-chip.active') ||
+                              document.querySelector('.ep-item-card.playing') ||
+                              navigables[0];
+            return preferred || navigables[0];
+        }
 
         // ═════════ Fast Direct Sibling Navigation (< 0.001ms) ═════════
         if (currentEl) {
             if (direction === 'right') {
                 const next = currentEl.nextElementSibling;
-                if (next && (next.classList.contains('server-pill') || next.classList.contains('season-chip') || next.classList.contains('action-chip-btn') || next.classList.contains('ep-item-card') || next.classList.contains('movie-card'))) {
-                    return next;
-                }
+                if (next && navigables.includes(next)) return next;
             }
             if (direction === 'left') {
                 const prev = currentEl.previousElementSibling;
-                if (prev && (prev.classList.contains('server-pill') || prev.classList.contains('season-chip') || prev.classList.contains('action-chip-btn') || prev.classList.contains('ep-item-card') || prev.classList.contains('movie-card'))) {
-                    return prev;
-                }
+                if (prev && navigables.includes(prev)) return prev;
             }
-            if ((direction === 'down' || direction === 'up') && currentEl.classList.contains('local-track-item')) {
-                const sibling = direction === 'down' ? currentEl.nextElementSibling : currentEl.previousElementSibling;
-                if (sibling && sibling.classList.contains('local-track-item')) return sibling;
+            if (direction === 'down' && (currentEl.classList.contains('ep-item-card') || currentEl.classList.contains('local-track-item'))) {
+                const next = currentEl.nextElementSibling;
+                if (next && navigables.includes(next)) return next;
+            }
+            if (direction === 'up' && (currentEl.classList.contains('ep-item-card') || currentEl.classList.contains('local-track-item'))) {
+                const prev = currentEl.previousElementSibling;
+                if (prev && navigables.includes(prev)) return prev;
             }
 
-            // Fast transition down from season chips into episode cards
+            // Down from Server Pills -> Quick Controls or Seasons Track
+            if (direction === 'down' && currentEl.classList.contains('server-pill')) {
+                const quickCtrl = document.getElementById('btnOpenSeasons') || document.getElementById('btnNextEp');
+                if (quickCtrl && navigables.includes(quickCtrl)) return quickCtrl;
+                const activeSeason = seasonsTrack?.querySelector('.season-chip.active') || seasonsTrack?.querySelector('.season-chip');
+                if (activeSeason && navigables.includes(activeSeason)) return activeSeason;
+            }
+
+            // Up from Quick Controls or Seasons Track -> Active Server Pill
+            if (direction === 'up' && (currentEl.classList.contains('ep-nav-btn') || currentEl.id === 'btnOpenSeasons' || currentEl.classList.contains('season-chip'))) {
+                const activePill = document.querySelector('.server-pill.active') || document.querySelector('.server-pill');
+                if (activePill && navigables.includes(activePill)) return activePill;
+            }
+
+            // Down from Quick Controls -> Seasons Track
+            if (direction === 'down' && currentEl.classList.contains('ep-nav-btn')) {
+                const activeSeason = seasonsTrack?.querySelector('.season-chip.active') || seasonsTrack?.querySelector('.season-chip');
+                if (activeSeason && navigables.includes(activeSeason)) return activeSeason;
+            }
+
+            // Down from Season Chips into Episode Cards
             if (direction === 'down' && currentEl.classList.contains('season-chip')) {
                 const isDrawerActive = tvEpisodesDrawer && tvEpisodesDrawer.classList.contains('active');
                 const targetEp = isDrawerActive
                     ? (tvDrawerEpisodesList ? tvDrawerEpisodesList.querySelector('.ep-item-card') : null)
                     : (episodesList ? episodesList.querySelector('.ep-item-card') : null);
-                if (targetEp) return targetEp;
+                if (targetEp && navigables.includes(targetEp)) return targetEp;
             }
 
-            // Fast transition up from first episode card into season chips
+            // Up from first Episode Card into Season Chips
             if (direction === 'up' && currentEl.classList.contains('ep-item-card')) {
                 const isFirstInList = !currentEl.previousElementSibling || !currentEl.previousElementSibling.classList.contains('ep-item-card');
                 if (isFirstInList) {
@@ -2393,7 +2420,7 @@
                     const targetChip = isDrawerActive
                         ? (tvDrawerSeasonsTrack ? (tvDrawerSeasonsTrack.querySelector('.season-chip.active') || tvDrawerSeasonsTrack.querySelector('.season-chip')) : null)
                         : (seasonsTrack ? (seasonsTrack.querySelector('.season-chip.active') || seasonsTrack.querySelector('.season-chip')) : null);
-                    if (targetChip) return targetChip;
+                    if (targetChip && navigables.includes(targetChip)) return targetChip;
                 }
             }
         }
@@ -2475,7 +2502,7 @@
         setTimeout(() => {
             const playPause = document.getElementById('btnPlayPause');
             const activePill = document.querySelector('.server-pill.active');
-            const backBtn = document.getElementById('btnBackFromPlayer');
+            const backBtn = document.getElementById('btnBackToHome');
             const target = (currentServer === 'local' && playPause) ? playPause : (activePill || backBtn);
             if (target) {
                 target.focus();
@@ -2484,117 +2511,36 @@
         }, 550);
     }
 
-    // Double-Tap Remote State Trackers
-    let lastOkPressTime = 0;
-    let okTapTimeout = null;
-    let lastLeftPressTime = 0;
-    let lastRightPressTime = 0;
-    let lastSeekDirection = null;
-    let lastSeekActionTime = 0;
-    const DOUBLE_TAP_DELAY = 420; // 420ms window for double tap
-    const SEEK_CHAIN_DELAY = 650;  // chain seeking (+10s, +20s, +30s)
-
-    // Google Android TV Remote Keydown Handler
+    // Google Android TV Remote Keydown Handler (Single tap moves selection box; Single OK opens item)
     window.addEventListener('keydown', (e) => {
         const key = e.key;
-        const code = e.keyCode;
+        const code = e.keyCode || e.which;
         const targetTag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
         const isInput = targetTag === 'input' || targetTag === 'textarea';
 
         const activeDrawer = document.querySelector('.local-drawer.active, .cinema-drawer.active, .tv-episodes-drawer.active');
 
-        // DPAD Directional Right (Single tap moves UI focus; Double-tap during playback seeks +10s)
+        // DPAD Directional Right (Single press moves selection box forward/right)
         if (key === 'ArrowRight' || code === 39 || code === 22) {
             if (!isInput) {
                 e.preventDefault();
-                if (activeDrawer) {
-                    navigateTvPlayer('right');
-                    return;
-                }
-
-                const videoPlaying = isVideoActivelyPlaying();
-                const localActive = isLocalPlayerActive();
-                const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
-                const isFocusedOnCards = document.activeElement && (
-                    document.activeElement.classList.contains('ep-item-card') ||
-                    document.activeElement.classList.contains('season-chip') ||
-                    document.activeElement.classList.contains('server-pill') ||
-                    document.activeElement.classList.contains('movie-card') ||
-                    document.activeElement.classList.contains('action-chip-btn')
-                );
-
-                if (!isFullscreen && isFocusedOnCards) {
-                    navigateTvPlayer('right');
-                } else if (isFullscreen || videoPlaying || localActive) {
-                    // Double-tap Right for +10s Seek
-                    const now = Date.now();
-                    const timeSinceLastRight = now - lastRightPressTime;
-                    const timeSinceLastSeek = now - lastSeekActionTime;
-
-                    if (timeSinceLastRight < DOUBLE_TAP_DELAY || (lastSeekDirection === 'right' && timeSinceLastSeek < SEEK_CHAIN_DELAY)) {
-                        lastRightPressTime = 0;
-                        lastSeekDirection = 'right';
-                        lastSeekActionTime = now;
-                        handleRemoteSeek(10);
-                    } else {
-                        lastRightPressTime = now;
-                        lastLeftPressTime = 0;
-                        showTvActionBadge('fas fa-rotate-right', 'Press Right again to +10s');
-                        pingLocalControls();
-                    }
-                } else {
-                    navigateTvPlayer('right');
-                }
+                navigateTvPlayer('right');
+                pingLocalControls();
             }
             return;
         }
 
-        // DPAD Directional Left (Single tap moves UI focus; Double-tap during playback seeks -10s)
+        // DPAD Directional Left (Single press moves selection box backward/left)
         if (key === 'ArrowLeft' || code === 37 || code === 21) {
             if (!isInput) {
                 e.preventDefault();
-                if (activeDrawer) {
-                    navigateTvPlayer('left');
-                    return;
-                }
-
-                const videoPlaying = isVideoActivelyPlaying();
-                const localActive = isLocalPlayerActive();
-                const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
-                const isFocusedOnCards = document.activeElement && (
-                    document.activeElement.classList.contains('ep-item-card') ||
-                    document.activeElement.classList.contains('season-chip') ||
-                    document.activeElement.classList.contains('server-pill') ||
-                    document.activeElement.classList.contains('movie-card') ||
-                    document.activeElement.classList.contains('action-chip-btn')
-                );
-
-                if (!isFullscreen && isFocusedOnCards) {
-                    navigateTvPlayer('left');
-                } else if (isFullscreen || videoPlaying || localActive) {
-                    // Double-tap Left for -10s Seek
-                    const now = Date.now();
-                    const timeSinceLastLeft = now - lastLeftPressTime;
-                    const timeSinceLastSeek = now - lastSeekActionTime;
-
-                    if (timeSinceLastLeft < DOUBLE_TAP_DELAY || (lastSeekDirection === 'left' && timeSinceLastSeek < SEEK_CHAIN_DELAY)) {
-                        lastLeftPressTime = 0;
-                        lastSeekDirection = 'left';
-                        lastSeekActionTime = now;
-                        handleRemoteSeek(-10);
-                    } else {
-                        lastLeftPressTime = now;
-                        lastRightPressTime = 0;
-                        showTvActionBadge('fas fa-rotate-left', 'Press Left again to -10s');
-                        pingLocalControls();
-                    }
-                } else {
-                    navigateTvPlayer('left');
-                }
+                navigateTvPlayer('left');
+                pingLocalControls();
             }
             return;
         }
 
+        // DPAD Directional Down (Single press moves selection box down)
         if (key === 'ArrowDown' || code === 40 || code === 20) {
             if (!isInput) {
                 e.preventDefault();
@@ -2604,6 +2550,7 @@
             return;
         }
 
+        // DPAD Directional Up (Single press moves selection box up)
         if (key === 'ArrowUp' || code === 38 || code === 19) {
             if (!isInput) {
                 e.preventDefault();
@@ -2613,100 +2560,20 @@
             return;
         }
 
-        // DPAD Center / Enter / OK (Double-Tap to Play/Pause; Single tap on menus selects item)
+        // DPAD Center / Enter / OK (Single press OPENS / ACTIVATES whatever has the selection box)
         if (key === 'Enter' || code === 13 || code === 23 || code === 66) {
             if (isInput) return; // Allow normal input enter
+            e.preventDefault();
 
-            if (activeDrawer) {
-                if (document.activeElement && activeDrawer.contains(document.activeElement)) {
-                    document.activeElement.click();
-                    return;
-                }
-            }
-
-            // Explicit Back Button click
-            if (document.activeElement && document.activeElement.id === 'btnBackFromPlayer') {
-                document.activeElement.click();
+            // Single press on any focused element immediately clicks/opens it!
+            const active = document.activeElement;
+            if (active && active !== document.body && active !== document.documentElement) {
+                active.click();
                 return;
             }
 
-            // Explicit control buttons (Audio, Subtitles, Episodes, Zoom, Fullscreen, etc.)
-            const isSpecificControlBtn = document.activeElement && (
-                document.activeElement.id === 'localBtnAudioTrack' ||
-                document.activeElement.id === 'localBtnSubtitles' ||
-                document.activeElement.id === 'localBtnSpeed' ||
-                document.activeElement.id === 'localBtnAspect' ||
-                document.activeElement.id === 'localBtnFullscreen' ||
-                document.activeElement.id === 'btnToggleZoom' ||
-                document.activeElement.id === 'btnLandscapeEpisodes' ||
-                document.activeElement.id === 'btnTvEpDrawerClose' ||
-                document.activeElement.id === 'btnChooseLocalFile' ||
-                document.activeElement.id === 'btnHubRescan' ||
-                document.activeElement.id === 'btnLocalShowStreams' ||
-                document.activeElement.id === 'btnLocalChangeFile' ||
-                document.activeElement.id === 'actionFavBtn' ||
-                document.activeElement.id === 'actionShareBtn' ||
-                document.activeElement.id === 'actionReloadBtn' ||
-                document.activeElement.id === 'actionFullscreenBtn'
-            );
-            if (isSpecificControlBtn) {
-                document.activeElement.click();
-                return;
-            }
-
-            // Deliberate user selection on interactive items (Season Chip, Episode Card, server pill, etc.)
-            const isIntentionalMenuClick = document.activeElement && (
-                document.activeElement.classList.contains('season-chip') ||
-                document.activeElement.classList.contains('ep-item-card') ||
-                (document.activeElement.classList.contains('server-pill') && !document.activeElement.classList.contains('active')) ||
-                document.activeElement.classList.contains('movie-card') ||
-                document.activeElement.id === 'seasonSelect' ||
-                document.activeElement.id === 'btnPrevEp' ||
-                document.activeElement.id === 'btnNextEp' ||
-                document.activeElement.id === 'btnOpenSeasons'
-            );
-            if (isIntentionalMenuClick) {
-                document.activeElement.click();
-                return;
-            }
-
-            // Double-Tap to Play / Pause during playback ("ok 2 bar press krne pe play and pause ho ek bar me ni")
-            const videoPlaying = isVideoActivelyPlaying();
-            const localActive = isLocalPlayerActive();
-            const isFullscreen = document.body.classList.contains('is-fullscreen') || !!document.fullscreenElement;
-
-            if (videoPlaying || isFullscreen || localActive) {
-                e.preventDefault();
-                const now = Date.now();
-                const timeSinceLastOk = now - lastOkPressTime;
-
-                if (timeSinceLastOk < DOUBLE_TAP_DELAY) {
-                    // Second press within window: execute Play/Pause!
-                    lastOkPressTime = 0;
-                    if (okTapTimeout) {
-                        clearTimeout(okTapTimeout);
-                        okTapTimeout = null;
-                    }
-                    handleRemotePlayPause();
-                } else {
-                    // First press: arm double-tap without pausing yet
-                    lastOkPressTime = now;
-                    showTvActionBadge('fas fa-hand-pointer', 'Press OK again to Play/Pause');
-                    pingLocalControls();
-                    if (okTapTimeout) clearTimeout(okTapTimeout);
-                    okTapTimeout = setTimeout(() => {
-                        lastOkPressTime = 0;
-                    }, DOUBLE_TAP_DELAY);
-                }
-                return;
-            }
-
-            // Fallback for other buttons
-            if (document.activeElement && document.activeElement !== document.body) {
-                if (document.activeElement.getAttribute('role') === 'button' || document.activeElement.tabIndex >= 0) {
-                    document.activeElement.click();
-                }
-            }
+            // If nothing is focused (e.g. background or video playing), toggle Play/Pause
+            handleRemotePlayPause();
             return;
         }
 
@@ -2717,7 +2584,7 @@
             return;
         }
 
-        // Media Rewind & FastForward (-10s / +10s)
+        // Dedicated Remote Media Rewind & FastForward (-10s / +10s)
         if (key === 'MediaRewind' || code === 227 || (key === 'j' && !isInput)) {
             e.preventDefault();
             handleRemoteSeek(-10);
